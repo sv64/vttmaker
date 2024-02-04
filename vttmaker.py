@@ -89,7 +89,7 @@ def on_autonext_press(event = None):
     mark_end()
     mark_start()
 
-def on_skip_press(event = None):
+def on_done_press(event = None):
   if line_index < 1:
     return
   if current_subtitle["start"] == None:
@@ -113,13 +113,15 @@ def on_back(event = None):
     messagebox.showerror("Error", f"No subtitle to remove.")
     return
   if current_subtitle["start"]:
-    messagebox.showerror("Error", f"\nDeleting \"{current_subtitle.get("content")}\" \n You need to go back and mark start again.")
+    if not messagebox.askokcancel("Warning", f"\nDeleting \"{current_subtitle.get("content")}\" \n You need to go back and mark start again."):
+      return
     if len(subtitles) > 2:
       current_subtitle["content"] = subtitles[-2]["content"] + "\n"
     current_subtitle["content"] = ""
     current_subtitle["start"] = None
   else:
-    messagebox.showerror("Error", f"\nDeleting \"{subtitles[-1].get("content")}\" \n You need to go back and mark start again.")
+    if not messagebox.askokcancel("Warning", f"\nDeleting \"{subtitles[-1].get("content")}\" \n You need to go back and mark start again."):
+      return
     del(subtitles[-1])
   print(f"\nCurrent: #{len(subtitles)+1} {current_subtitle}")
   load_next_line(diff = -1)
@@ -143,6 +145,7 @@ def to_time(seconds):
 
 def update_display():
     script_listbox.delete(0, tk.END)
+    script_listbox.selection_clear(0, tk.END)
     subtitle_text.config(state=tk.NORMAL)
     subtitle_text.delete("1.0", tk.END)
 
@@ -166,7 +169,7 @@ def update_display():
         if n == line_index:
             script_listbox.itemconfig(n, {'bg': 'lightgrey'})
 
-        if player.is_playing():
+        if player.is_playing() or not audio_started:
           script_listbox.see(min(line_index + 5, len(script_lines)))
           subtitle_text.see(tk.END)
 
@@ -194,6 +197,7 @@ def choose_audio():
         while not media.is_parsed():
           time.sleep(0.1)
         MediaTotalLength = (media.get_duration() // 1000)
+        print(f"Media loaded {file_path} length {MediaTotalLength}")
 
 def choose_script():
     global script_lines, line_index, current_subtitle
@@ -202,6 +206,7 @@ def choose_script():
         script_lines = open(file_path, 'r').read().splitlines()
         subtitles.clear()
         line_index, current_subtitle = 0, {}
+        print(f"Script loaded {file_path}")
         update_display()
 
 def save_subtitles():
@@ -388,6 +393,8 @@ def show_console_output_screen():
   stdoutext.pack(padx=15, pady=15, fill=tk.BOTH)
   update_stdout()
 
+def on_prev_line():
+  load_next_line(diff=-1)
 
 root = tk.Tk()
 root.title("Subtitle Timing Editor")
@@ -434,7 +441,6 @@ timestamp_label = tk.Label(root, text="0.00s / 0.00s")
 timestamp_label.pack(side=tk.BOTTOM, pady=5)
 
 
-
 btn_frame = tk.Frame(root, borderwidth=0, relief="solid")
 btn_frame.pack(side=tk.BOTTOM, padx=5)
 
@@ -444,9 +450,21 @@ next_button.pack(side=tk.LEFT, padx=5, pady=5)
 autonext_button = tk.Button(btn_frame, text='Next', width=2, command=on_autonext_press)
 autonext_button.pack(side=tk.LEFT, padx=5, pady=5)
 
-skip_button = tk.Button(btn_frame, text='Done', width=2, command=on_skip_press)
-skip_button.pack(side=tk.LEFT, padx=5, pady=5)
+done_button = tk.Button(btn_frame, text='Done', width=2, command=on_done_press)
+done_button.pack(side=tk.LEFT, padx=5, pady=5)
 
+
+btn_frame2 = tk.Frame(root, borderwidth=0, relief="solid")
+btn_frame2.pack(side=tk.BOTTOM, padx=5)
+
+prev_button = tk.Button(btn_frame2, text='Back', width=2, command=on_prev_line)
+prev_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+del_button = tk.Button(btn_frame2, text='Del', width=2, command=on_back)
+del_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+skip_button = tk.Button(btn_frame2, text='Skip', width=2, command=load_next_line)
+skip_button.pack(side=tk.LEFT, padx=5, pady=5)
 
 
 file_frame = tk.Frame(root, padx=10, pady=5, borderwidth=0, relief="solid")
@@ -486,9 +504,11 @@ skip_time_entry.insert(0, "0")
 info_frame = tk.Frame(root, borderwidth=0, relief="solid", width=10, height=10, padx=10)
 info_frame.pack(side=tk.TOP, expand=True, anchor="nw", padx=(5,15), pady=(10,15))
 
-info_label = tk.Label(info_frame, text='VTT Maker by @morgan9e\n\nUsage:\n Mark <\'>\n Next <;>\n Done <Return>\n'
-  '\n- Creates \"stacked\" subtitles easily.\n- It stacks subtitle from previous scene.\n- You can save and load progress.'
-  '\n- Load audio before loading progress.\n- You can Edit, Merge, Delete script with left click.'
+info_label = tk.Label(info_frame, text='' \
+  # 'VTT Maker by @morgan9e\n\n' \
+  'Usage:\n Mark <\'>\n Next <;>\n Done <Return>\n' \
+  '\n- Creates \"stacked\" subtitles easily.\n- Stacks subtitle from previous scene.' \
+  '\n- Load audio before restoring   progress.\n- You can Edit, Merge, Delete script with left click.' \
   , font=("monospace", 8), wraplength=140, justify=tk.LEFT)
 
 info_label.pack(side=tk.TOP, anchor="nw")
@@ -505,8 +525,8 @@ def presskey(btn, func):
 
 root.bind('\'', presskey(next_button,on_next_press))
 root.bind(';', presskey(autonext_button,on_autonext_press))
-root.bind('<Return>', presskey(skip_button,on_skip_press))
-root.bind('<Control-z>', on_back)
+root.bind('<Return>', presskey(skip_button,on_done_press))
+root.bind('\\', on_back)
 root.bind('<space>', presskey(play_button,toggle_audio))
 
 root.bind('<Left>', presskey(rewind_button,rewind_audio))

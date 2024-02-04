@@ -23,7 +23,7 @@ You can edit, merge, delete each script lines.
 
 - **Done(\<Return\>)**
 
- Marks breaks scene, resets scene stack.
+  Marks end if needed, breaks scene, resets scene stack.
   
 <br />
 

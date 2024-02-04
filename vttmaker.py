@@ -54,13 +54,17 @@ def fastforward_audio(event = None):
   player.set_time(new_time)
 
 def mark_start():
+  print(line_index)
   timestamp = player.get_time() / 1000.0
   current_subtitle["start"] = timestamp
   if line_index > len(script_lines) or not len(script_lines):
     print("Please load first..")
     return
-  current_subtitle["content"] = current_subtitle.get("content","") + script_lines[line_index]
-  # current_subtitle["content"] =  script_lines[line_index]
+  if line_index > len(script_lines) - 1:
+    messagebox.showerror("Error", "No more subtitle.")
+    current_subtitle["start"] = None
+    return
+  current_subtitle["content"] =  script_lines[line_index]
   current_subtitle["index"] = line_index
   update_display()
   print(f"\n{timestamp} --> ", end="")
@@ -73,7 +77,7 @@ def mark_end():
   current_subtitle["end"] = timestamp
   subtitles.append(current_subtitle.copy())
   print(f"{current_subtitle["end"]}\n{current_subtitle["content"]}")
-  current_subtitle["content"] = current_subtitle["content"] + "\n"
+  current_subtitle["content"] = ""
   current_subtitle["start"] = None
   load_next_line()
   update_display()
@@ -94,19 +98,11 @@ def on_autonext_press(event = None):
 def on_done_press(event = None):
   if line_index < 1:
     return
-  if current_subtitle["start"] == None:
-    current_subtitle["content"] = ""
-    update_display()
-    return  
-  timestamp = player.get_time() / 1000.0
-  current_subtitle["end"] = timestamp
-  subtitles.append(current_subtitle.copy())
-  print(f"{current_subtitle["end"]}\n{current_subtitle["content"]}")
-  current_subtitle["content"] = ""
-  current_subtitle["start"] = None
-  load_next_line()
+  if current_subtitle["start"] != None:
+    mark_end()
+  subtitles.append({"start": None,"end": None,"content": None,"split": True})
   update_display()
-
+    
 def on_back(event = None):
   global subtitles
   if len(subtitles) == 0:
@@ -132,7 +128,7 @@ def on_back(event = None):
 
 def update_timestamp():
   current_pos = max(player.get_time() / 1000, 0)
-  timestamp_label.config(text=f"{current_pos:.3f}s / {MediaTotalLength}s")
+  timestamp_label.config(text=f"{to_time(current_pos, True)} / {to_time(MediaTotalLength, True)}")
   root.after(200, update_timestamp)
 
 def multiline(content):
@@ -140,11 +136,16 @@ def multiline(content):
   if content:
     return "- " + content.strip().replace("\n", "\n- ")
 
-def to_time(seconds):
+def to_time(seconds, hide = False):
   minutes = int(seconds // 60)
   second = seconds % 60
   hours = int(minutes // 60)
   minute = minutes % 60
+  if hide:
+    if minutes > 60:
+      return f"{hours}:{minute:02}:{second:06.3f}"
+    else:
+      return f"{minute:02}:{second:06.3f}"
   return f"{hours}:{minute:02}:{second:06.3f}"
 
 def update_display():
@@ -160,11 +161,14 @@ def update_display():
     for n, line in enumerate(script_lines):
         display_line = " " + line
         script_listbox.insert(tk.END, display_line)
-
+        # print(n, len(subtitles))
         if n < len(subtitles):
             lstart = subtitles[n]["start"]
             lend = subtitles[n]["end"]
-            subtitle_display = f"{n+1}\n{to_time(lstart)} --> {to_time(lend)}\n{multiline(subtitles[n]['content']).replace("\n", "↵\n")} \n\n"
+            if lstart:
+              subtitle_display = f"{n+1}\n{to_time(lstart)} --> {to_time(lend)}\n{multiline(subtitles[n]['content']).replace("\n", "↵\n")} \n\n"
+            else:
+              subtitle_display = f"----------\n\n"  
             subtitle_text.insert(tk.END, subtitle_display)
         
         elif n == len(subtitles) :
@@ -190,9 +194,19 @@ def update_display():
 
 def load_next_line(diff = 1):
   global line_index
-  if line_index < len(script_lines):
+  print(line_index, len(script_lines))
+
+  if (line_index < len(script_lines) - 1) or (diff < 0):
     line_index += diff
     update_display()
+    return
+    
+  elif line_index == len(script_lines) - 1:
+    line_index += 1
+    update_display()
+    if player.is_playing():
+      player.pause()
+    messagebox.showerror("Error", f"No more subtitle.")
 
 def load_file(label):
     file_path = filedialog.askopenfilename()
@@ -233,6 +247,25 @@ def save_subtitles():
                 f.write("\n\n")
 
     print(f"Done saving {len(subtitles)} subtitles")
+
+def save_stacked_subtitles():
+    vtt_path = filedialog.asksaveasfilename(defaultextension=".vtt", filetypes=[("VTT files", "*.vtt"), ("All files", "*.*")])
+    if vtt_path:
+        with open(vtt_path, 'w') as f:
+            f.write('WEBVTT\n\n')
+            buffer = ""
+            for subtitle in subtitles:
+                if subtitle.get("break", False):
+                  buffer = ""
+                if len(buffer) != 0:
+                  buffer += "\n"
+                buffer += multiline(subtitle['content'])
+
+                f.write(f"{to_time(subtitle['start'])} --> {to_time(subtitle['end'])}\n")
+                f.write(buffer)
+                f.write("\n\n")
+
+    print(f"Done saving {len(subtitles)} subtitles (stacking)")
 
 def save_prog():
   import json
@@ -426,9 +459,8 @@ def playrate():
   print(f"Playback rate x{speedex:.2f}")
   player.set_rate(speedex)
 
-
 root = tk.Tk()
-root.title("Subtitle Timing Editor")
+root.title("Subtitle Editor")
 root.geometry('1000x800')
 root.resizable(False, False)
 
@@ -534,7 +566,10 @@ loadprog_button = tk.Button(file_frame, text='Load progress',  command=load_prog
 loadprog_button.pack(side=tk.TOP, fill=tk.X)
 
 save_button = tk.Button(file_frame, text='Save Subtitles', command=save_subtitles)
-save_button.pack(side=tk.TOP, pady=10, fill=tk.X)
+save_button.pack(side=tk.TOP, pady=5, fill=tk.X)
+
+stack_button = tk.Button(file_frame, text='Save Stacked', command=save_stacked_subtitles)
+stack_button.pack(side=tk.TOP, pady=(0,10), fill=tk.X)
 
 skip_time_frame = tk.Frame(file_frame)
 skip_time_frame.pack(side=tk.TOP, fill=tk.X)

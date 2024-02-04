@@ -60,6 +60,8 @@ def mark_start():
     print("Please load first..")
     return
   current_subtitle["content"] = current_subtitle.get("content","") + script_lines[line_index]
+  # current_subtitle["content"] =  script_lines[line_index]
+  current_subtitle["index"] = line_index
   update_display()
   print(f"\n{timestamp} --> ", end="")
 
@@ -94,8 +96,6 @@ def on_done_press(event = None):
     return
   if current_subtitle["start"] == None:
     current_subtitle["content"] = ""
-    current_subtitle["start"] = None
-    load_next_line()
     update_display()
     return  
   timestamp = player.get_time() / 1000.0
@@ -113,16 +113,20 @@ def on_back(event = None):
     messagebox.showerror("Error", f"No subtitle to remove.")
     return
   if current_subtitle["start"]:
-    if not messagebox.askokcancel("Warning", f"\nDeleting \"{current_subtitle.get("content")}\" \n You need to go back and mark start again."):
+    if not messagebox.askokcancel("Warning", f"\nDeleting current #{current_subtitle.get("index")}.\n You need to go back and mark start again."):
       return
-    if len(subtitles) > 2:
-      current_subtitle["content"] = subtitles[-2]["content"] + "\n"
     current_subtitle["content"] = ""
+    if len(subtitles) > 1:
+      current_subtitle["content"] = subtitles[-1]["content"] + "\n"
     current_subtitle["start"] = None
   else:
-    if not messagebox.askokcancel("Warning", f"\nDeleting \"{subtitles[-1].get("content")}\" \n You need to go back and mark start again."):
+    if not messagebox.askokcancel("Warning", f"\nDeleting previous #{subtitles[-1].get("index")}.\n You need to go back and mark start again."):
       return
     del(subtitles[-1])
+    current_subtitle["content"] = ""
+    if len(subtitles) > 2:
+      current_subtitle["content"] = subtitles[-1]["content"] + "\n"
+    current_subtitle["start"] = None
   print(f"\nCurrent: #{len(subtitles)+1} {current_subtitle}")
   load_next_line(diff = -1)
 
@@ -144,8 +148,12 @@ def to_time(seconds):
   return f"{hours}:{minute:02}:{second:06.3f}"
 
 def update_display():
+    listbox_scroll_pos = script_listbox.yview()
+    text_scroll_index = subtitle_text.index(tk.INSERT)
+
     script_listbox.delete(0, tk.END)
     script_listbox.selection_clear(0, tk.END)
+
     subtitle_text.config(state=tk.NORMAL)
     subtitle_text.delete("1.0", tk.END)
 
@@ -172,6 +180,11 @@ def update_display():
         if player.is_playing() or not audio_started:
           script_listbox.see(min(line_index + 5, len(script_lines)))
           subtitle_text.see(tk.END)
+        else:
+          script_listbox.yview_moveto(listbox_scroll_pos[0])
+          subtitle_text.see(text_scroll_index)
+
+    info_label.config(text="[ Current stack ]\n" + current_subtitle.get('content', ""))
 
     subtitle_text.config(state=tk.DISABLED)
 
@@ -396,6 +409,24 @@ def show_console_output_screen():
 def on_prev_line():
   load_next_line(diff=-1)
 
+speedex = 1
+
+def inc_playrate():
+  global speedex
+  speedex = round(speedex * 1.2, 2)
+  playrate()
+
+def dec_playrate():
+  global speedex
+  speedex = round(speedex / 1.2, 2)
+  playrate()
+
+def playrate():
+  speed_label.config(text=f"x{speedex:.2f}")
+  print(f"Playback rate x{speedex:.2f}")
+  player.set_rate(speedex)
+
+
 root = tk.Tk()
 root.title("Subtitle Timing Editor")
 root.geometry('1000x800')
@@ -439,6 +470,20 @@ fastforward_button.pack(side=tk.LEFT, padx=5, pady=5)
 
 timestamp_label = tk.Label(root, text="0.00s / 0.00s")
 timestamp_label.pack(side=tk.BOTTOM, pady=5)
+
+
+ctrl_frame = tk.Frame(root, borderwidth=0, relief="solid")
+ctrl_frame.pack(side=tk.BOTTOM, padx=5)
+
+one_button = tk.Button(ctrl_frame, text='-', borderwidth=0, command=dec_playrate)
+one_button.pack(side=tk.LEFT, padx=(5,0), pady=5)
+
+speed_label = tk.Label(ctrl_frame, text="x1")
+speed_label.pack(side=tk.LEFT, padx=0, pady=5)
+
+two_button = tk.Button(ctrl_frame, text='+', borderwidth=0, command=inc_playrate)
+two_button.pack(side=tk.LEFT, padx=(0,5), pady=5)
+
 
 
 btn_frame = tk.Frame(root, borderwidth=0, relief="solid")
@@ -504,12 +549,14 @@ skip_time_entry.insert(0, "0")
 info_frame = tk.Frame(root, borderwidth=0, relief="solid", width=10, height=10, padx=10)
 info_frame.pack(side=tk.TOP, expand=True, anchor="nw", padx=(5,15), pady=(10,15))
 
-info_label = tk.Label(info_frame, text='' \
-  # 'VTT Maker by @morgan9e\n\n' \
-  'Usage:\n Mark <\'>\n Next <;>\n Done <Return>\n' \
-  '\n- Creates \"stacked\" subtitles easily.\n- Stacks subtitle from previous scene.' \
-  '\n- Load audio before restoring   progress.\n- You can Edit, Merge, Delete script with left click.' \
-  , font=("monospace", 8), wraplength=140, justify=tk.LEFT)
+info_label = tk.Label(info_frame, text='[ Current stack ]\n', width=20, font=("monospace", 8), anchor="nw", justify=tk.LEFT)
+
+# info_label = tk.Label(info_frame, text='' \
+#   # 'VTT Maker by @morgan9e\n\n' \
+#   'Usage:\n Mark <\'>\n Next <;>\n Done <Return>\n' \
+#   '\n- Creates \"stacked\" subtitles easily.\n- Stacks subtitle from previous scene.' \
+#   '\n- Load audio before restoring   progress.\n- You can Edit, Merge, Delete script with left click.' \
+#   , font=("monospace", 8), wraplength=140, justify=tk.LEFT)
 
 info_label.pack(side=tk.TOP, anchor="nw")
 

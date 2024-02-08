@@ -214,18 +214,26 @@ def openFile(filename):
     return -1
   return data
 
-def main():
-  vttfile    = "test.vtt"
-  scriptfile = "test.txt"
-  modfile    = "test.script"
+def main(vttfile, scriptfile):
+  modfile = ".".join(scriptfile.split(".")[:-2]) + ".script"
 
   full_script, full_scenes = create_word_scenes(openFile(vttfile), openFile(scriptfile))
-  saveFile("test.script", " ".join(full_script).replace(". ", ".\n"))
+  saveFile(modfile, " ".join(full_script).replace(". ", ".\n"))
   a, b = scene_from_new_script(openFile(modfile), full_script, full_scenes)
   final_vtt = build_new_subtitle(a, b)
-  # print(final_vtt)
-  saveFile("test.final.vtt", to_vtt(final_vtt), True)
-  saveFile("test.final.json", json.dumps(final_vtt, indent=2), True)
+  saveFile(".".join(vttfile.split(".")[:-2]) + ".final.vtt", to_vtt(final_vtt), True)
+  saveFile(".".join(vttfile.split(".")[:-2]) + ".stacked.vtt", to_stacked_vtt(final_vtt), True)
+  saveFile(".".join(vttfile.split(".")[:-2]) + ".final.json", json.dumps(final_vtt, indent=2), True)
 
 if __name__=="__main__":
-  main()
+  import sys
+  if len(sys.argv) != 3:
+    print(f"Usage: {sys.argv[0]} [vtt file] [txt file]\n** Only output from openai-whisper with '--word-timestamp true' is accepted.)")
+    sys.exit()
+  vtt = sys.argv[1]
+  script = sys.argv[2]
+  if (not os.path.exists(vtt)) or (not os.path.exists(script)):
+    print(f"Input file doesnt exists.")
+    sys.exit()
+
+  main(vtt, script)

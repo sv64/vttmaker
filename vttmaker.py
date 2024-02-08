@@ -101,6 +101,7 @@ def on_done_press(event = None):
   if current_subtitle["start"] != None:
     mark_end()
   subtitles.append({"start": None,"end": None,"content": None,"split": True})
+  scene_breaks.append(line_index)
   update_display()
     
 def on_back(event = None):
@@ -158,35 +159,48 @@ def update_display():
     subtitle_text.config(state=tk.NORMAL)
     subtitle_text.delete("1.0", tk.END)
 
-    for n, line in enumerate(script_lines):
-        display_line = " " + line
-        script_listbox.insert(tk.END, display_line)
-        # print(n, len(subtitles))
+    scene_breaks = []
+    real_index = 0
+    for n in range(len(subtitles)):
         if n < len(subtitles):
             lstart = subtitles[n]["start"]
             lend = subtitles[n]["end"]
             if lstart:
-              subtitle_display = f"{n+1}\n{to_time(lstart)} --> {to_time(lend)}\n{multiline(subtitles[n]['content']).replace("\n", "↵\n")} \n\n"
+              subtitle_display = f"{subtitles[n]["index"]}\n{to_time(lstart)} --> {to_time(lend)}\n{multiline(subtitles[n]['content']).replace("\n", "↵\n")} \n\n"
             else:
+              scene_breaks.append(subtitles[n-1]["index"])
+              print(f"End section at idx {subtitles[n-1]["index"]}, {to_time(subtitles[n-1]["end"])}")
               subtitle_display = f"----------\n\n"  
             subtitle_text.insert(tk.END, subtitle_display)
         
         elif n == len(subtitles) :
           lstart = current_subtitle.get("start", "")
-
           if lstart:
-            subtitle_display = f"{n+1}\n{to_time(lstart)} -> \n{multiline(current_subtitle.get('content'))} \n\n"
+            subtitle_display = f"{subtitles[n]["index"]}\n{to_time(lstart)} -> \n{multiline(current_subtitle.get('content').replace("\n", "↵\n"))} \n\n"
             subtitle_text.insert(tk.END, subtitle_display)
-        
+
+    list_color = 0
+    for n, line in enumerate(script_lines):
+        display_line = " " + line
+        script_listbox.insert(tk.END, f"{n:03} " + display_line)
+        if n-1 in scene_breaks:
+          print(f"New section from {n}")
+          list_color = ~list_color
         if n == line_index:
             script_listbox.itemconfig(n, {'bg': 'lightgrey'})
 
-        if player.is_playing() or not audio_started:
-          script_listbox.see(min(line_index + 5, len(script_lines)))
-          subtitle_text.see(tk.END)
-        else:
-          script_listbox.yview_moveto(listbox_scroll_pos[0])
-          subtitle_text.see(text_scroll_index)
+        if n < line_index:
+          if list_color:
+            script_listbox.itemconfig(n, {'bg': '#FFEFFF'})
+          else:
+            script_listbox.itemconfig(n, {'bg': '#FFFFEF'})
+
+    if player.is_playing() or not audio_started:
+      script_listbox.see(min(line_index + 5, len(script_lines)))
+      subtitle_text.see(tk.END)
+    else:
+      script_listbox.yview_moveto(listbox_scroll_pos[0])
+      subtitle_text.see(text_scroll_index)
 
     info_label.config(text="[ Current stack ]\n" + current_subtitle.get('content', ""))
 
@@ -252,18 +266,24 @@ def save_stacked_subtitles():
     vtt_path = filedialog.asksaveasfilename(defaultextension=".vtt", filetypes=[("VTT files", "*.vtt"), ("All files", "*.*")])
     if vtt_path:
         with open(vtt_path, 'w') as f:
-            f.write('WEBVTT\n\n')
+            f.write('WEBVTT\n\n\n')
             buffer = ""
             for subtitle in subtitles:
-                if subtitle.get("break", False):
+                if subtitle.get("split", False):
                   buffer = ""
+                  continue
+
                 if len(buffer) != 0:
-                  buffer += "\n"
+                  if str(subtitle['content'].strip())[-1] == ".":
+                    buffer += "\n"
+                  else:
+                    buffer += " "
+
                 buffer += multiline(subtitle['content'])
 
                 f.write(f"{to_time(subtitle['start'])} --> {to_time(subtitle['end'])}\n")
                 f.write(buffer)
-                f.write("\n\n")
+                f.write("\n\n\n")
 
     print(f"Done saving {len(subtitles)} subtitles (stacking)")
 

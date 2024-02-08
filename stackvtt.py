@@ -4,7 +4,7 @@ from datetime import timedelta
 VTT_TIMECODE_PATTERN = r"((?:\d{2}:)?\d{2}:\d{2}\.\d{3}) --> ((?:\d{2}:)?\d{2}:\d{2}\.\d{3})"
 VTT_LINE_NUMBER_PATTERN = r"^\d+$"
 
-def parse_vtt(vtt_string):
+def from_vtt(vtt_string):
     parts = re.split(r'\n\n+', vtt_string.strip())
 
     if parts[0].startswith('WEBVTT'):
@@ -35,47 +35,39 @@ def parse_vtt(vtt_string):
 def to_vtt(subtitles):
     vtt_content = "WEBVTT\n\n"
     for idx, subtitle in enumerate(subtitles):
-        # print(subtitle, idx)
         start = subtitle['start']
         end = subtitle['end']
         content = subtitle['content']
         vtt_content += f"{start} --> {end}\n{content}\n\n"
     return vtt_content.strip()
 
+def stack_subtitle():
+    buffer = []
+    linebuf = []
+    for line in parsed_vtt:
+        print(line["content"].strip()) 
+        content = line["content"].strip()
+        if True:
+            linebuf.append(line)
+        else:
+            linebuf.append(line)
+            buffer.append(linebuf)
+            linebuf = []
+
+    sub = []
+    for section in buffer:
+        strbuf = ""
+        for scene in section:
+            strbuf += scene["content"]
+            # if scene["content"][-1] == ".":
+            strbuf += "\n"
+            # else:
+                # strbuf += " "
+            scene["content"] = strbuf
+            sub.append(scene)
 
 with open("example.vtt", "r") as f:
     vtt_content = f.read()
 
-parsed_vtt = parse_vtt(vtt_content)
-#print(len(parsed_vtt))
-
-buffer = []
-linebuf = []
-
-for line in parsed_vtt:
-#    print(line["content"].strip())
-    content = line["content"].strip()
-    if "".join([i["content"] for i in linebuf]).count(".") < 4   or   len(linebuf) < 5:
-        linebuf.append(line)
-    else:
-        linebuf.append(line)
-        buffer.append(linebuf)
-        linebuf = []
-
-# print(buffer)
-
-sub = []
-for section in buffer:
-    strbuf = ""
-    for scene in section:
-        strbuf += scene["content"]
-        # if scene["content"][-1] == ".":
-        strbuf += "\n"
-        # else:
-            # strbuf += " "
-        scene["content"] = strbuf
-        sub.append(scene)
-
-# print(buffer[0])
-
-print(to_vtt(sub))
+parsed_vtt = from_vtt(vtt_content)
+print(to_vtt(stack_subtitle(parsed_vtt)))

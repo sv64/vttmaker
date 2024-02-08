@@ -58,9 +58,21 @@ def to_stacked_vtt(subtitles):
       else:
         buffer += " "
     buffer += subtitle['content'].strip()
-    vtt_content += f"{to_time(subtitle['start'])} --> {to_time(subtitle['end'])}\n"
+    vtt_content += f"{subtitle['start']} --> {subtitle['end']}\n"
     vtt_content += buffer
     vtt_content += "\n\n\n"
+  return vtt_content
+
+def script_from_word_vtt(wordvtt):
+  subtitles = from_vtt(wordvtt)
+  print(f"VTT {len(subtitles)} lines. Generating script file from VTT.")
+  sentences = []
+  for n, subtitle in enumerate(subtitles):
+    sentence = subtitle["content"].replace("<u>", "").replace("</u>", "")
+    if (sentences[-1] if sentences else None) != sentence:
+      sentences.append(sentence)
+  # print(sentences)
+  return sentences
 
 def create_word_scenes(wordvtt, scriptraw):
   subtitles = from_vtt(wordvtt)
@@ -215,25 +227,45 @@ def openFile(filename):
   return data
 
 def main(vttfile, scriptfile):
-  modfile = ".".join(scriptfile.split(".")[:-2]) + ".script"
-
+  modfile = ".".join(scriptfile.split(".")[:-1]) + ".script"
   full_script, full_scenes = create_word_scenes(openFile(vttfile), openFile(scriptfile))
-  saveFile(modfile, " ".join(full_script).replace(". ", ".\n"))
-  a, b = scene_from_new_script(openFile(modfile), full_script, full_scenes)
-  final_vtt = build_new_subtitle(a, b)
-  saveFile(".".join(vttfile.split(".")[:-2]) + ".final.vtt", to_vtt(final_vtt), True)
-  saveFile(".".join(vttfile.split(".")[:-2]) + ".stacked.vtt", to_stacked_vtt(final_vtt), True)
-  saveFile(".".join(vttfile.split(".")[:-2]) + ".final.json", json.dumps(final_vtt, indent=2), True)
+  if not os.path.exists(modfile):
+    saveFile(modfile, " ".join(full_script).replace(". ", ".\n"))
+    print(f"Saved modification file as {modfile}. Modify it and return back.")
+  else:
+    a, b = scene_from_new_script(openFile(modfile), full_script, full_scenes)
+    final_vtt = build_new_subtitle(a, b)
+    jsonfile = ".".join(vttfile.split(".")[:-1]) + ".json"
+    saveFile(jsonfile, json.dumps(final_vtt, indent=2), True)
+    print(f"Saved JSON file as {jsonfile}. Fix it, and convert it to VTT.")
 
 if __name__=="__main__":
   import sys
-  if len(sys.argv) != 3:
-    print(f"Usage: {sys.argv[0]} [vtt file] [txt file]\n** Only output from openai-whisper with '--word-timestamp true' is accepted.)")
+  if len(sys.argv) not in (2, 3):
+    print(f"Usage: {sys.argv[0].split("/")[-1]} [vtt file] (txt file)\n"                                  \
+      "       {sys.argv[0].split("/")[-1]} [JSON file]\n"                                                 \
+      "** Only output from openai-whisper with '--word-timestamp true' is accepted.)\n"                   \
+      "** You have to run this for first time, and then fix .script file, and then re-run this script.\n" \
+      "** Adding newline/period/commas are onlt permitted. Fix else in JSON file.")
     sys.exit()
   vtt = sys.argv[1]
-  script = sys.argv[2]
-  if (not os.path.exists(vtt)) or (not os.path.exists(script)):
-    print(f"Input file doesnt exists.")
-    sys.exit()
-
-  main(vtt, script)
+  if len(sys.argv) == 3:
+    script = sys.argv[2]
+    if (not os.path.exists(vtt)) or (not os.path.exists(script)):
+      print(f"Input file doesnt exists.")
+      sys.exit()
+    main(vtt, script)
+  else:
+    if ".json" in vtt:
+      final_vtt = json.loads(openFile(vtt))
+      orgf = ".".join(vtt.split(".")[:-1])
+      print(f"Saved VTT file as {orgf}.final.vtt.")
+      saveFile(orgf + ".final.vtt", to_vtt(final_vtt), True)
+      saveFile(orgf + ".stacked.vtt", to_stacked_vtt(final_vtt), True)
+      sys.exit()
+    if (not os.path.exists(vtt)):
+      print(f"Input file doesnt exists.")
+      sys.exit()
+    script = ".".join(vtt.split(".")[:-1]) + ".txt"
+    saveFile(script, "\n".join(script_from_word_vtt(openFile(vtt))))
+    main(vtt, script)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import re, json
-import os
+import os, sys
 from datetime import timedelta
 
 def from_vtt(vtt_string):
@@ -29,46 +29,7 @@ def from_vtt(vtt_string):
       'end': end,
       'content': (content.replace("-\n", "\n").replace("</u>-\n", "</u>\n").replace("-", " ").replace("%", " ").replace("<u> "," <u>").replace(" </u>","</u> ").replace("<u> </u>","").replace("<u></u>","").replace(" \n", "\n"))[:-1]
     })
-  # def sanitizevttwordlevel(subtitles):
-  #   errorwords = []
-  #   newords = {}
-  #   for subtitle in subtitles:
-  #     for word in subtitle["content"].split(" "):
-  #       if ("<u>" in word):
-  #         newword = None
-  #         if (len(word.split("<u>")) > 1):
-  #           newword = word.replace("<u>", " <u>")
-  #         if (len(word.split("</u>")) > 1):
-  #           newword = word.replace("</u>", "</u> ")
-  #         if newword:
-  #           original = word.split("<u>")[1].split("</u>")[0]
-  #           if original in errorwords:
-  #             for i in errorwords[original]:
 
-
-  #           else:
-  #             errorwords[orig].append(word)
-
-    #   error = False
-    #   if "<u>" in subtitle["content"]:
-    #     if len(subtitle["content"].split("<u>")) > 1:
-    #       if subtitle["content"].split("<u>")[0][-1] != " ":
-    #         error = True
-    #     if len(subtitle["content"].split("</u>")) > 1:
-    #       if subtitle["content"].split("</u>")[1][0] != " ":
-    #         error = True
-    #   if error:
-    #     word = subtitle["content"].split("<u>")[1].split("</u>")[0]
-    #     errorwords.append(word)
-    #     for word in subtitle["content"].split(" "):
-    #       if word.replace("<u>")
-
-  #   for subtitle in subtitles:
-  #     for words in subtitle["content"].split(" "):
-  #       if word in errorwords:
-  #         subtitle["content"]
-
-  # sanitizevttwordlevel(subtitles)
   return subtitles
 
 def to_vtt(subtitles):
@@ -84,22 +45,32 @@ def to_vtt(subtitles):
 
     return vtt_content.strip()
 
-def to_stacked_vtt(subtitles):
+def to_stacked_vtt(subtitles, continous = True):
   vtt_content = "WEBVTT\n\n\n"
   buffer = ""
-  for subtitle in subtitles:
+  for n, subtitle in enumerate(subtitles):
     if subtitle.get("split", False):
       buffer = ""
       continue
+
     if len(buffer) != 0:
       if str(subtitle['content'].strip())[-1] == ".":
         buffer += "\n"
       else:
         buffer += " "
     buffer += subtitle['content'].strip()
-    vtt_content += f"{subtitle['start']} --> {subtitle['end']}\n"
+
+    if n < len(subtitles) - 1:
+      end_time = subtitles[n+1]['start'] if continous and not subtitles[n+1].get("split", False) else subtitle['end']
+    else:
+      end_time = subtitle['end']
+    
+    vtt_content += f"{subtitle['start']} --> {end_time}\n"
     vtt_content += buffer
     vtt_content += "\n\n\n"
+
+    print(f"{subtitle['start']} --> {end_time}\n{buffer}\n\n")
+
   return vtt_content
 
 def script_from_word_vtt(wordvtt):
@@ -113,7 +84,6 @@ def script_from_word_vtt(wordvtt):
       sentences.append(sentence)
     ADD_NEXT_SENTENCE = 0
     if subtitle["content"][-4:] == "</u>":
-      # print(f"{len(sentences)} END {subtitle["content"]}")
       ADD_NEXT_SENTENCE = 1
       if n + 2 < len(subtitles):
         if subtitles[n+2]["content"].replace("<u>", "").replace("</u>", "") != sentence:
@@ -149,7 +119,6 @@ def create_word_scenes(wordvtt, scriptraw):
     else:
       word_idx = 0
 
-    # print(scenes_cur, subtitle, word_idx, sentence)
     if ("<u>" not in subtitle["content"]) and word_idx >= len(sentence.split(" ")):
       pass
     if ("<u>" in subtitle["content"]) and word_idx >= len(sentence.split(" ")):
@@ -164,7 +133,6 @@ def create_word_scenes(wordvtt, scriptraw):
       print(f"Changed to {word_idx}, {scenes_cur}")
 
     if "<u>" in subtitle["content"]:
-      # print(subtitle["content"])
       word = subtitle["content"].split("<u>")[1].split("</u>")[0]
 
       if word not in sentence.split(" "):
@@ -179,8 +147,6 @@ def create_word_scenes(wordvtt, scriptraw):
 
       word_time = {"start": subtitle["start"], "end": subtitle["end"], "index": word_idx, "word": word}
       current_scene["timestamp"].append(word_time)
-
-  # print(json.dumps(scenes, indent=2))
 
   for scene in scenes:
     if len(scene["scene"].split(" ")) != len(scene["timestamp"]):
@@ -200,12 +166,10 @@ def create_word_scenes(wordvtt, scriptraw):
       print("Error, Mismatch")
       return
 
-
   assert len(full_scenes) == len(full_script)
 
   return full_script, full_scenes
   
-# Detect long break or change in context, inserts section break into script.
 def autobreak(lines, times):
   from datetime import timedelta
 
@@ -223,9 +187,6 @@ def autobreak(lines, times):
     tmark = parsetime(j["end"])
     if tdiff > parsetime("0:0.0"):
       long_breaks.append(tdiff)
-      # print()
-    # print(i, end=" ")
-  # print()
 
   mean_break = parsetime("0:0.0")
   for i in long_breaks:
@@ -273,7 +234,7 @@ def scene_from_new_script(raw_script, full_script, full_scenes):
     n += 1
     if n == len(mod_script):
       break
-  # print(mod_script)
+  
   print(f"Original: {len(full_script)}, Modded: {len(mod_script)}")
   allowed_list = [".", "\n", "\n\n", ",", "?", "##"]
 
@@ -297,7 +258,6 @@ def scene_from_new_script(raw_script, full_script, full_scenes):
       if fail > 10:
         print("Error: Failed to match words,")
         return
-      # print("Back")
       fail += 1
       n -= 1
     n, orig_index = n+1, orig_index+1
@@ -307,17 +267,18 @@ def scene_from_new_script(raw_script, full_script, full_scenes):
 def build_new_subtitle(new_script, new_timestamp):
   buffer, new_scenes, start, end = [], [], None, None
   current_scene = []
-  # print(" ".join(new_script).split("\n"))
-
+ 
   for i, j in zip(new_script, new_timestamp):
     if "\n" in i:
       buffer.append(i.replace("\n", ""))
       current_scene.append({"content": " ".join(buffer).replace("##", ""), "start": start, "end": j["end"]})
       buffer, start = [], None
+ 
       if "\n\n" in i:
         print(f"Section break at line #{len(current_scene):<3}| \"{current_scene[-1]["content"]}\"")
         new_scenes.append(current_scene)
         current_scene = []
+
     else:
       buffer.append(i)
       if not start:
@@ -330,7 +291,6 @@ def build_new_subtitle(new_script, new_timestamp):
   if current_scene != (new_scenes[-1] if new_scenes else None):
     new_scenes.append(current_scene)
 
-  # print("\n\n".join(["\n".join([j["content"] for j in i]) for i in new_scenes]))
   newsub = []
   for n, i in enumerate(new_scenes):
     newsub += i
@@ -338,6 +298,8 @@ def build_new_subtitle(new_script, new_timestamp):
       newsub.append({"content": "Break", "start": None, "end": None, "split": True})
 
   return newsub
+
+###
 
 def saveFile(filename, data, override = False):
   if os.path.exists(filename) and not override:
@@ -353,57 +315,77 @@ def openFile(filename):
     return -1
   return data
 
-def main(vttfile, scriptfile):
-  modfile = ".".join(scriptfile.split(".")[:-1]) + ".script"
-  x = create_word_scenes(openFile(vttfile), openFile(scriptfile))
-  if not x:
-    sys.exit(-1)
-  full_script, full_scenes = x
+###
 
-  if not os.path.exists(modfile):
+if __name__=="__main__":
+  if len(sys.argv) not in (3, 4):
+    PROG = sys.argv[0].split("/")[-1]
+    print(f"Usage: {PROG} script [VTT file] \n"               \
+ f"       {" "*len(PROG)} apply  [VTT file] [script file] \n" \
+ f"       {" "*len(PROG)} create [JSON file]"               \
+          )                              
+    sys.exit()
+
+  COMMAND = sys.argv[1]
+  if COMMAND not in ["script", "apply", "create"]:
+    print("Error. Command not found.")
+    sys.exit()
+
+  print(f"-> {PROG} {COMMAND} {FILE}")
+  if COMMAND == "script":
+    FILE = sys.argv[2]
+    if (not os.path.exists(FILE)):
+      print(f"Input file doesnt exists.")
+      sys.exit(-1)
+
+    modfile = ".".join(scriptfile.split(".")[:-1]) + ".script"
+    x = create_word_scenes(openFile(FILE), script_from_word_vtt(openFile(FILE)))
+    if not x:
+      sys.exit(-1)
+
+    full_script, full_scenes = x
     genscript = autobreak(full_script,full_scenes)
     saveFile(modfile, genscript)
-    print(f"Saved modification file as {modfile}. Modify it and return back.")
-  else:
-    x = scene_from_new_script(openFile(modfile), full_script, full_scenes)
+    print(f"Saved script file {modfile}.")
+  
+  elif COMMAND == "apply":
+    if len(sys.argv) != 4:
+      print(f"Not sufficient input.")
+      sys.exit()
+
+    FILE1, FILE2 = sys.argv[2], sys.argv[3]
+    if (not os.path.exists(FILE1)) or (not os.path.exists(FILE2)):
+      print(f"Input file doesnt exists.")
+      sys.exit(-1)
+
+    x = create_word_scenes(openFile(FILE1), script_from_word_vtt(openFile(FILE)))
+    if not x:
+      sys.exit(-1)
+    full_script, full_scenes = x
+
+    x = scene_from_new_script(openFile(FILE2), full_script, full_scenes)
     if not x:
       sys.exit(-1)
     a, b = x
 
-    final_vtt = build_new_subtitle(a, b)
-    jsonfile = ".".join(vttfile.split(".")[:-1]) + ".json"
-    saveFile(jsonfile, json.dumps(final_vtt, indent=2), True)
-    print(f"Saved JSON file as {jsonfile}. Fix it, and convert it to VTT.")
-
-if __name__=="__main__":
-  import sys
-  if len(sys.argv) not in (2, 3):
-    print(f"Usage: {sys.argv[0].split("/")[-1]} [vtt file] (txt file)\n"                                  \
-     f"       {sys.argv[0].split("/")[-1]} [JSON file]\n"                                                 \
-      "** Only output from openai-whisper with '--word-timestamp true' is accepted.)\n"                   \
-      "** You have to run this for first time, and then fix .script file, and then re-run this script.\n" \
-      "** Adding newline/period/commas are onlt permitted. Fix else in JSON file.")
-    sys.exit()
-
-  vtt = sys.argv[1]
-  print(f"\n[{vtt}]")
-  if len(sys.argv) == 3:
-    script = sys.argv[2]
-    if (not os.path.exists(vtt)) or (not os.path.exists(script)):
+    final_sub = build_new_subtitle(a, b)
+    jsonfile = ".".join(FILE1.split(".")[:-1]) + ".json"
+    saveFile(jsonfile, json.dumps(final_sub, indent=2), True)
+    print(f"Saved JSON file {jsonfile}.")
+    sys.exit(0)
+  
+  elif COMMAND == "create":
+    FILE = sys.argv[2]
+    if (not os.path.exists(FILE)):
       print(f"Input file doesnt exists.")
       sys.exit(-1)
-    main(vtt, script)
-  else:
-    if ".json" in vtt:
-      final_vtt = json.loads(openFile(vtt))
-      orgf = ".".join(vtt.split(".")[:-1])
-      print(f"Saved VTT file as {orgf}.final.vtt.")
-      saveFile(orgf + ".final.vtt", to_vtt(final_vtt), True)
+
+    final_vtt = json.loads(openFile(FILE))
+    orgf = ".".join(FILE.split(".")[:-1])
+    print(f"Saved VTT file as {orgf}.final.vtt.")
+
+    if os.path.exists(orgf + ".vtt"):
       saveFile(orgf + ".stacked.vtt", to_stacked_vtt(final_vtt), True)
-      sys.exit(0)
-    if (not os.path.exists(vtt)):
-      print(f"Input file doesnt exists.")
-      sys.exit(-1)
-    script = ".".join(vtt.split(".")[:-1]) + ".txt"
-    saveFile(script, "\n".join(script_from_word_vtt(openFile(vtt))))
-    main(vtt, script)
+    else:
+      saveFile(orgf + ".vtt", to_stacked_vtt(final_vtt), True)
+    sys.exit(0)

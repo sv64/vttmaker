@@ -61,7 +61,7 @@ elif ".edit" in file:
 
     new_brk, new_sub = [], {}
     for line in lines.split("\n"):
-        if "\n############ TIMESTAMPS ############" == line:
+        if "############ TIMESTAMPS ############" in line:
             break
         if line:
             idx, content = line.split(" | ")
